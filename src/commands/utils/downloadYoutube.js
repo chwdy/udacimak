@@ -1,15 +1,14 @@
-import _cliProgress from 'cli-progress';
 import fs from 'fs-extra';
-import ora from 'ora';
 import path from 'path';
-import progress from 'progress-stream';
-import youtubedl from 'youtube-dl';
 import {
   downloadYoutubeSubtitles,
   filenamify,
   findVideoLocalSubtitles,
   logger,
 } from '.';
+
+const youtubedl = require('youtube-dl-exec');
+const ora = require('ora');
 
 
 /**
@@ -77,13 +76,41 @@ export default function downloadYoutube(videoId, outputPath, prefix, title) {
             logger.error(`Youtube video with id ${videoId} is no longer available. The CLI will ignore this error and skip this download.`);
             resolve(null);
           } else {
-            logger.error(`Youtube video with id ${videoId} could not be downloaded available. The CLI will ignore this error and skip this download. Please check this error message:\n\n${JSON.stringify(message)}`);
+            logger.error(`Youtube video with id ${videoId} could not be downloaded available. The CLI will ignore this error and skip this download. Please check this error message:\n\n${JSON.stringify(message)} ==END==`);
             resolve(null);
           }
         }
       }
     }
   }); //.return Promise
+}
+async function downloadVideo(videoId, urlYoutube, argsYoutube, tempPath, savePath) {
+  const spinnerInfo = ora(`Getting Youtube video (id=${videoId}) information`).start();
+
+  try {
+    await youtubedl(urlYoutube, {
+      output: tempPath,
+      ...argsYoutube,
+    }).then((output) => {
+      console.log('Download completed:', output);
+      spinnerInfo.succeed();
+    }).catch((err) => {
+      console.error('Error:', err);
+      spinnerInfo.fail();
+    });
+    console.log('urlYoutube', urlYoutube);
+    console.log('argsYoutube', argsYoutube);
+    console.log('tempPath', tempPath);
+    console.log('savePath', savePath);
+    return {
+      src: urlYoutube,
+      subtitles: [], // Placeholder for subtitles
+    };
+  } catch (error) {
+    // spinnerInfo.fail();
+    logger.error(error);
+    throw error; // Rethrow or handle the error as needed
+  }
 }
 
 function downloadYoutubeHelper(videoId, outputPath, prefix, title, format) {
@@ -93,11 +120,19 @@ function downloadYoutubeHelper(videoId, outputPath, prefix, title, format) {
     const urlYoutube = `https://www.youtube.com/watch?v=${videoId}`;
     const tempPath = path.join(outputPath, `.${filenameYoutube}`);
     const savePath = path.join(outputPath, filenameYoutube); `${outputPath}/${filenameYoutube}`;
+
     let timeGap;
     let timeout = 0;
 
-    const argsYoutube = format ? [`--format=${format}`] : [];
-    global.ytVerbose && argsYoutube.push('--verbose');
+    const argsYoutube = {};
+    if (format) {
+      argsYoutube.format = format;
+    }
+    if (global.ytVerbose) {
+      argsYoutube.verbose = true;
+    }
+    argsYoutube.mergeOutputFormat = 'mp4';
+    // argsYoutube.ext = 'Mp4';
 
     // calculate amount of time to wait before starting this next Youtube download
     if (global.previousYoutubeTimestamp) {
@@ -122,67 +157,37 @@ function downloadYoutubeHelper(videoId, outputPath, prefix, title, format) {
       }, timeout);
     });
 
-    const spinnerInfo = ora(`Getting Youtube video (id=${videoId}) information with quality="${format}"`).start();
-    const video = youtubedl(urlYoutube, argsYoutube);
-
-    video.on('info', (info) => {
-      spinnerInfo.succeed();
-      // get video name
-      const fileSize = info.size;
-      // create a new progress bar instance
-      const progressBar = new _cliProgress.Bar({}, _cliProgress.Presets.shades_classic);
-      progressBar.start(fileSize, 0);
-
-
-      const progressStream = progress({
-        length: fileSize,
-        time: 20,
-      });
-      progressStream.on('progress', (progressData) => {
-        progressBar.update(progressData.transferred);
+    await downloadVideo(videoId, urlYoutube, argsYoutube, tempPath, savePath)
+      .then((result) => {
+        console.log('Download complete:', result);
+      })
+      .catch((error) => {
+        console.error('Download failed:', error);
+        reject(error);
       });
 
-      // Write video to temporary file first. If download finishes, rename it
-      // to proper file name later. This is to avoid the issue when the terminal
-      // stop unexpectedly, when restart, the unfinished video will be
-      // redownloaded
-      video
-        .pipe(progressStream)
-        .pipe(fs.createWriteStream(tempPath));
+    logger.info(`Downloaded video ${filenameYoutube} with quality="${format}"`);
+    try {
+      await fs.rename(tempPath, savePath);
+    } catch (errorRename) {
+      console.error(`FS error,${errorRename}`);
+      reject(errorRename);
+    }
 
-      video.on('end', async () => {
-        // rename temp file to final file name
-        try {
-          await fs.rename(tempPath, savePath);
-        } catch (errorRename) {
-          reject(errorRename);
-        }
 
-        progressBar.update(fileSize);
-        progressBar.stop();
-        logger.info(`Downloaded video ${filenameYoutube} with quality="${format}"`);
+    let subtitles = [];
+    if (global.downloadYoutubeSubtitles) {
+      try {
+        subtitles = await downloadYoutubeSubtitles(videoId, filenameBase, outputPath);
+      } catch (error) {
+        logger.warn(error);
+      }
+    } //.if downloadYoutubeSubtitles
 
-        let subtitles = [];
-
-        if (global.downloadYoutubeSubtitles) {
-          try {
-            subtitles = await downloadYoutubeSubtitles(videoId, filenameBase, outputPath);
-          } catch (error) {
-            logger.warn(error);
-          }
-        } //.if downloadYoutubeSubtitles
-
-        global.previousYoutubeTimestamp = Date.now();
-        resolve({
-          src: filenameYoutube,
-          subtitles,
-        });
-      }); //.video.on end
-    }); //.video.on info
-
-    video.on('error', async (error) => {
-      spinnerInfo.fail();
-      reject(error);
+    global.previousYoutubeTimestamp = Date.now();
+    resolve({
+      src: filenameYoutube,
+      subtitles,
     });
   });
 }

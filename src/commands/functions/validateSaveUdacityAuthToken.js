@@ -10,6 +10,7 @@ import {
   CLI_CONFIG_UDACITY_AUTH_TOKEN,
 } from '../../config';
 
+const util = require('util');
 
 /**
  * Validate a token by sending request to Udacity API and save it
@@ -26,6 +27,7 @@ export default async function validateSaveUdacityAuthToken(token) {
       spinner.fail();
       logger.error(`Could not validate your Udacity token. Please try again. Here's the error message:
       ${res.body}`);
+      console.log(util.inspect(res, false, null, true /* enable colors */));
       return null;
     }
     // save token

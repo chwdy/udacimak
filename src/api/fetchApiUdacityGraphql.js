@@ -17,16 +17,12 @@ export default function fetchApiUdacityGraphql(url, queryGraphql, udacityAuthTok
   }
 
   const headers = {
-    Accept: 'application/json',
+    Accept: '*/*',
     Authorization: `Bearer ${udacityAuthToken}`,
-    'Content-Type': 'application/json; charset=UTF-8',
-    Host: 'classroom-content.udacity.com',
-    Origin: 'https://classroom.udacity.com',
-    Referer: 'https://classroom.udacity.com/me',
-    // https://github.com/request/request/issues/2047#issuecomment-272473278
-    // avoid socket hang up error
+    'Content-Type': 'application/json',
+    Host: 'learn.udacity.com',
     Connection: 'keep-alive',
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.102 Safari/537.36',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36',
   };
   const method = 'POST';
   const requestOptions = {

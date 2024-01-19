@@ -6,7 +6,7 @@ const request = require('request');
 const inquirer = require('inquirer');
 
 const options = {
-  url: 'https://user-api.udacity.com/signin',
+  url: 'https://auth.udacity.com/api/user/signin',
   headers: {
     'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.14; rv:74.0) Gecko/20100101 Firefox/74.0',
     Accept: 'application/json',
